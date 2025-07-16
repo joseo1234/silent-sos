@@ -35,10 +35,10 @@
 
     // 손동작별 번호와 메시지 매핑
     const phoneAndMsg = {
-      "주먹": { phone: "01027694272", msg: "도와주세요!" },
-      "락앤롤": { phone: "01027694272", msg: "전 괜찮아요" },
-      "브이": { phone: "01027694272", msg: "살려주세요!" },
-      "펴진 손": { phone: "01027694272", msg: "위험해요!" }
+      "주먹": { phone: "01027694272", msg: "강원도 원주시 ㅇㅇ로 @@아파트 1001호 입니다. 불이났어요. 도와주세요. 연락처 010-xxxx-xxxx", display: "화재 구조 요청" },
+      "락앤롤": { phone: "01027694272", msg: "강원도 원주시 ㅇㅇ로 @@아파트 1001호 입니다. 숨쉬기 어렵고 위급한 상황입니다. 구조가 필요합니다. 연락처 010-xxxx-xxxx", display: "호흡곤란 상황 구조 요청" },
+      "브이": { phone: "01027694272", msg: "강원도 원주시 ㅇㅇ로 @@아파트 1001호 입니다. 집에 누가 침입했어요. 빨리 와주세요. 연락처 010-xxxx-xxxx" , display: "강도 침입 알림"},
+      "펴진 손": { phone: "01027694272", msg: "누군가 뒤따라오고 있습니다. 현재 위험합니다. 도와주세요. 연락처 010-xxxx-xxxx", display:"스토킹 위험 알림"}
     };
 
     const hands = new Hands({
@@ -173,7 +173,9 @@
 
           const a = document.createElement('a');
           a.href = `sms:${number}?body=${encodeURIComponent(fullMessage)}`;
-          a.click();
+          setTimeout(() => {
+            a.click();
+          }, 1000);
         },
         (error) => {
           alert("위치 접근 실패: " + error.message);
