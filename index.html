@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>Silent SOS</title>
+  <style>
+    body {
+      margin: 0;
+      background: black;
+      font-family: sans-serif;
+    }
+    video, canvas {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100vw;
+      height: auto;
+      max-height: 100vh;
+      transform: scaleX(-1); /* 셀카 모드 좌우반전 */
+    }
+  </style>
+</head>
+<body>
+  <video id="video" autoplay playsinline muted></video>
+  <canvas id="canvas"></canvas>
+
+  <!-- MediaPipe -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+
+  <script>
+    const videoElement = document.getElementById('video');
+    const canvasElement = document.getElementById('canvas');
+    const canvasCtx = canvasElement.getContext('2d');
+
+    // 손동작별 번호와 메시지 매핑
+    const phoneAndMsg = {
+      "주먹": { phone: "01027694272", msg: "도와주세요!" },
+      "락앤롤": { phone: "01027694272", msg: "전 괜찮아요" },
+      "브이": { phone: "01027694272", msg: "살려주세요!" },
+      "펴진 손": { phone: "01027694272", msg: "위험해요!" }
+    };
+
+    const hands = new Hands({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+    });
+
+    hands.setOptions({
+      maxNumHands: 2,
+      modelComplexity: 1,
+      minDetectionConfidence: 0.7,
+      minTrackingConfidence: 0.7
+    });
+
+    hands.onResults(onResults);
+
+    const camera = new Camera(videoElement, {
+      onFrame: async () => {
+        await hands.send({ image: videoElement });
+      },
+      width: 640,
+      height: 480
+    });
+
+    camera.start();
+
+    let currentMessage = "";
+    let currentPosition = { x: 0, y: 0 };
+    let lastGesture = "";
+    let lastTime = 0;
+
+    function onResults(results) {
+      canvasElement.width = videoElement.videoWidth;
+      canvasElement.height = videoElement.videoHeight;
+
+      canvasCtx.save();
+      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+      canvasCtx.translate(canvasElement.width, 0);
+      canvasCtx.scale(-1, 1);
+      canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+      if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+        const landmarks = results.multiHandLandmarks[0];
+        const handedness = results.multiHandedness[0].label;
+
+        drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, { color: '#00FF00', lineWidth: 4 });
+        drawLandmarks(canvasCtx, landmarks, { color: '#FF0000', lineWidth: 2 });
+
+        const gesture = recognizeGesture(landmarks, handedness);
+        const now = Date.now();
+
+        if (gesture.name && phoneAndMsg[gesture.name]) {
+          currentMessage = phoneAndMsg[gesture.name].msg;
+          currentPosition = landmarks[0];
+
+          if (gesture.name !== lastGesture || now - lastTime > 5000) {
+            lastGesture = gesture.name;
+            lastTime = now;
+            handleAction(gesture.name);
+          }
+        } else {
+          currentMessage = "";
+        }
+      } else {
+        currentMessage = "";
+      }
+
+      if (currentMessage) {
+        showMessage(currentMessage, currentPosition);
+      }
+
+      canvasCtx.restore();
+    }
+
+    function showMessage(message, wrist) {
+      const x = wrist.x * canvasElement.width;
+      const y = wrist.y * canvasElement.height - 30;
+      canvasCtx.font = "bold 36px sans-serif";
+      canvasCtx.fillStyle = "red";
+      canvasCtx.strokeStyle = "black";
+      canvasCtx.lineWidth = 3;
+      canvasCtx.strokeText(message, x, y);
+      canvasCtx.fillText(message, x, y);
+    }
+
+    function recognizeGesture(landmarks, handedness) {
+      function isOpen(tip, pip) {
+        return landmarks[tip].y < landmarks[pip].y;
+      }
+
+      const isRight = handedness === 'Right';
+      const thumbOpen = isRight
+        ? landmarks[4].x < landmarks[3].x
+        : landmarks[4].x > landmarks[3].x;
+
+      const indexOpen = isOpen(8, 6);
+      const middleOpen = isOpen(12, 10);
+      const ringOpen = isOpen(16, 14);
+      const pinkyOpen = isOpen(20, 18);
+
+      const allOpen = thumbOpen && indexOpen && middleOpen && ringOpen && pinkyOpen;
+      const allClosed = !thumbOpen && !indexOpen && !middleOpen && !ringOpen && !pinkyOpen;
+      const isV = indexOpen && middleOpen && !ringOpen && !pinkyOpen;
+      const isRock = indexOpen && pinkyOpen && !middleOpen && !ringOpen;
+
+      if (allClosed) return { name: "주먹" };
+      if (isRock) return { name: "락앤롤" };
+      if (isV) return { name: "브이" };
+      if (allOpen) return { name: "펴진 손" };
+
+      return { name: "" };
+    }
+
+    function handleAction(gestureName) {
+      if (!gestureName || !phoneAndMsg[gestureName]) return;
+
+      const { phone, msg } = phoneAndMsg[gestureName];
+      sendSMS(phone, msg);
+    }
+
+    function sendSMS(number, msg) {
+      if (!navigator.geolocation) {
+        alert("위치 정보 미지원 브라우저입니다.");
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const lat = position.coords.latitude.toFixed(6);
+          const lon = position.coords.longitude.toFixed(6);
+          const locationLink = `https://maps.google.com/?q=${lat},${lon}`;
+          const fullMessage = `${msg}\n\n[위치]: ${locationLink}`;
+
+          const a = document.createElement('a');
+          a.href = `sms:${number}?body=${encodeURIComponent(fullMessage)}`;
+          a.click();
+        },
+        (error) => {
+          alert("위치 접근 실패: " + error.message);
+        }
+      );
+    }
+  </script>
+</body>
+</html>
