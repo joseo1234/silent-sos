@@ -90,7 +90,7 @@
         const now = Date.now();
 
         if (gesture.name && phoneAndMsg[gesture.name]) {
-          currentMessage = phoneAndMsg[gesture.name].msg;
+          currentMessage = phoneAndMsg[gesture.name].display;
           currentPosition = landmarks[0];
 
           if (gesture.name !== lastGesture || now - lastTime > 5000) {
